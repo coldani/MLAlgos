@@ -4,9 +4,9 @@ from scipy.optimize import minimize
 class logistic_regression:
     '''
     This class represents a logistic regression classifier
-    X and y are the input matrix and output vector respectively
-    X: a np.ndarray matrix of observations. Each row is an observations, each column is a variable
-    y: a np.array. Each element is the true output of an observation
+    X and y are the training set and output vector respectively
+    X: np.ndarray. Each row is an observations, each column is a variable
+    y: np.array. Each element is the true output value of an observation (either 1 or 0)
 
     Methods
     train: returns the fitted parameters
@@ -23,7 +23,7 @@ class logistic_regression:
         if y is not None:
             assert len(y) == X.shape[0], 'x and y have different sizes!'
     
-    def sigmoid(self, X=None, params=None):
+    def _sigmoid(self, X=None, params=None):
         '''
         X: np ndarray, defaults to instance X
         params: tuple, list, array, defaults to instance params
@@ -38,24 +38,26 @@ class logistic_regression:
         params = np.array(params).reshape((num_params,1))
         z = np.dot(X, params)
         sigmoid = 1 / (1 + np.exp(-1*z))
-        # the two lines below have been added to avoid sigmoid resulting in 0 or 1
+        
+        # the two lines below have been added to avoid sigmoid resulting in exactly 0 or 1
         epsilon = 10**(-15)
         sigmoid = sigmoid - epsilon*(sigmoid==1) + epsilon*(sigmoid==0)
+        
         return sigmoid
 
-    def cost(self, params, X=None, y=None, regularized = True, lambda_ = 0.1, has_intercept = True):
+    def _cost(self, params, X=None, y=None, regularized = True, lambda_ = 0.1, has_intercept = True):
         '''
         params: np.array of parameters
         X: np.ndarray of independent variables. shape = (# observations, # variables)
-           If it includes the intercept, this must be the first column.
+           If X includes the intercept, this must be the first column.
            Defaults to instance X
         y: np.array of dependent variables, either 1 or 0. Must be 2 dimensional: shape = (len(y),1)
            Defaults to instance y
-        regularized: Boolean. If True applies regularization to the training of the model
+        regularized: Boolean. If True, it applies regularization to the training of the model
         lambda_: regularization parameter, used only if regularized=True
-        has_intercept: Boolean. Used only for regularization purposed (doesn't penalize intercept coefficient)
+        has_intercept: Boolean. Used only for regularization purposed (it doesn't penalize intercept coefficient)
 
-        returns (cost, gradient), where cost is a float and gradient is a np.array
+        returns (cost, gradient), where cost is a float, and gradient is a np.array
         '''
         
         if X is None:
@@ -68,7 +70,7 @@ class logistic_regression:
         grad = np.zeros(m)
         y = y.reshape((len(y),1))
 
-        h_x = self.sigmoid(X, params)
+        h_x = self._sigmoid(X, params)
         cost = np.sum( -y*np.log(h_x) - (1 - y)*np.log(1 - h_x))/m
         if regularized:
             if has_intercept:
@@ -91,7 +93,7 @@ class logistic_regression:
         X: the training set
         y: the correct classification (1 or 0)
 
-        updates self.params to the trained parameters, and returns them
+        returns the trained parameters, and updates self.params
         '''
         if X is None:
             X = self.X
@@ -102,7 +104,7 @@ class logistic_regression:
         num_params = np.shape(X)[1]
         init_params = np.random.random(num_params)
 
-        trained_params = minimize(self.cost, x0=init_params, args=(X, y, regularized, lambda_, has_intercept),
+        trained_params = minimize(self._cost, x0=init_params, args=(X, y, regularized, lambda_, has_intercept),
                                 jac=True, options={'maxiter':2000, 'disp':True})
         self.params = trained_params.x
 
@@ -115,14 +117,14 @@ class logistic_regression:
            Defaults to instance X
         params: tuple, list, array, defaults to instance params
 
-        returns the predictions, a np.ndarray of shape (len(y),1) of either 0 or 1 and updates the self.y_hat variable
+        returns the predicted y variable (np.ndarray of shape (len(y),1) of either 0 or 1) and updates the self.y_hat variable
         '''
         if X is None:
             X = self.X
         if params is None:
             params = self.params
         
-        h_x = self.sigmoid(X, params)
+        h_x = self._sigmoid(X, params)
         y_hat = (h_x >= 0.5)*1
         y_hat = y_hat.reshape((len(y_hat),1))
         self.y_hat = y_hat
@@ -131,7 +133,7 @@ class logistic_regression:
 
     def score(self, y=None, y_hat=None):
         '''
-        returns a tuple with (precision, recall, accuracy)
+        returns a tuple with (accuracy, precision, recall, f1)
         '''
         if y is None:
             y = self.y
