@@ -15,6 +15,8 @@ class logistic_regression:
     '''
     
     def __init__(self, X, y = None, params = None, y_hat=None):
+        if len(X.shape)==1:
+            X = X.reshape(len(X),1)
         self.X = X
         if y is not None:
             self.y = y.reshape(len(y),1)
