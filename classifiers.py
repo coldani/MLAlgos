@@ -7,6 +7,9 @@ class logistic_regression:
     X and y are the training set and output vector respectively
     X: np.ndarray. Each row is an observations, each column is a variable
     y: np.array. Each element is the true output value of an observation (either 1 or 0)
+    has_intercept: Boolean.  Used only for regularization purposes (it doesn't penalize intercept coefficient)
+    regularized: Boolean. If True, applies regularization to the training of the model
+
 
     Methods
     train: returns the fitted parameters
@@ -14,12 +17,15 @@ class logistic_regression:
     score: returns the accuracy, precision, recall and f1 scores
     '''
     
-    def __init__(self, X, y = None, params = None, y_hat=None):
+    def __init__(self, X, y = None, has_intercept=True, regularized=True, params = None, y_hat=None):
+        
         if len(X.shape)==1:
             X = X.reshape(len(X),1)
         self.X = X
         if y is not None:
             self.y = y.reshape(len(y),1)
+        self.has_intercept = has_intercept
+        self.regularized = regularized
         self.params = params
         self.y_hat = y_hat
         if y is not None:
@@ -47,7 +53,7 @@ class logistic_regression:
         
         return sigmoid
 
-    def _cost(self, params, X=None, y=None, regularized = True, lambda_ = 0.1, has_intercept = True):
+    def _cost(self, params, X=None, y=None, regularized = None, lambda_ = 0.1, has_intercept = None):
         '''
         params: np.array of parameters
         X: np.ndarray of independent variables. shape = (# observations, # variables)
@@ -55,9 +61,9 @@ class logistic_regression:
            Defaults to instance X
         y: np.array of dependent variables, either 1 or 0. Must be 2 dimensional: shape = (len(y),1)
            Defaults to instance y
-        regularized: Boolean. If True, it applies regularization to the training of the model
+        regularized: Boolean. If True, applies regularization to the training of the model
         lambda_: regularization parameter, used only if regularized=True
-        has_intercept: Boolean. Used only for regularization purposed (it doesn't penalize intercept coefficient)
+        has_intercept: Boolean. Used only for regularization purposes (it doesn't penalize intercept coefficient)
 
         returns (cost, gradient), where cost is a float, and gradient is a np.array
         '''
@@ -66,7 +72,11 @@ class logistic_regression:
             X = self.X
         if y is None:
             y = self.y
-       
+        if regularized is None:
+            regularized = self.regularized
+        if has_intercept is None:
+            has_intercept = self.has_intercept       
+
         m = np.size(params)
         cost = 0
         grad = np.zeros(m)
@@ -90,7 +100,7 @@ class logistic_regression:
 
         return (cost, grad)
 
-    def train(self, X=None, y=None, regularized = True, lambda_ = 0.1, has_intercept = True):
+    def train(self, X=None, y=None, regularized = None, lambda_ = 0.1, has_intercept = None):
         '''
         X: the training set
         y: the correct classification (1 or 0)
@@ -101,6 +111,10 @@ class logistic_regression:
             X = self.X
         if y is None:
             y = self.y
+        if regularized is None:
+            regularized = self.regularized
+        if has_intercept is None:
+            has_intercept = self.has_intercept       
         
         y = y.reshape((len(y),1))
         num_params = np.shape(X)[1]
