@@ -1,5 +1,14 @@
 import numpy as np
 
+'''
+feature_scaling: used to scale a set of features. Supports various methods - see function docstrings
+
+split_dataset: splits a dataset into a training set, scorr-validation set and (optionally) a test set
+
+add_intercept: quickly adds the intercept (a constant, with value equal to 1) to a dataset
+'''
+
+
 def feature_scaling(x, method='stand'):
     '''
     x: np ndarray, with shape (num_obs, num_var)
