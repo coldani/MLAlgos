@@ -1,6 +1,13 @@
 import numpy as np
 from scipy.optimize import minimize
 
+'''
+logistic_regression: a class that implements the logistic regression classifier.
+                    It allows to fit the parameters, predict results and compute a few performance metrics to evaluate the predictions
+
+
+'''
+
 class logistic_regression:
     '''
     This class represents a logistic regression classifier
