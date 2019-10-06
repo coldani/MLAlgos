@@ -1,50 +1,11 @@
 import numpy as np
-import numpy.linalg as la
-
-class pca:
-    '''
-    computes the principal components of a matrix
-    --> assumes that variables are in the columns, observations in the rows
-    '''
-
-    def __init__(self, data):
-        self.data = data
-    
-    def varcov(self, data):
-        '''
-        returns the varcov matric of the data
-        '''
-        varcov = np.cov(data, rowvar=False)
-        return varcov
-
-    def eig_val_vec(self, data):
-        '''
-        returns the eigenvalues and eigenvectors of the varcov matric of the data
-        '''
-        varcov = self.varcov(data)
-        eig_val, eig_vec = la.eig(varcov)
-        return (eig_val, eig_vec)
-    
-    def pc(self, data, num=1):
-        '''
-        returns the feature vector with the 'num'-greatest pc, as well as the % of variance explained
-        '''
-        eig_val, eig_vec = self.eig_val_vec(data)
-        max_eig_val = np.sort(eig_val)[-num:][::-1]
-        arg_max_eig_val = np.argsort(eig_val)[-num:][::-1]
-        max_eig_vec = eig_vec[:,arg_max_eig_val]
-
-        pc = np.empty(shape=(len(eig_val),num))
-        pc = np.matmul(data, max_eig_vec)
-        var_explained = np.sum(max_eig_val) / np.sum(eig_val)
-        return (pc, var_explained)
 
 def feature_scaling(x, method='stand'):
     '''
     x: np ndarray, with shape (num_obs, num_var)
     method: string. Valid methods are 'stand', 'norm', 'scale'
             'stand': standardization of the variables, with 0 mean and uniot variance
-            'norm': normalization of the variables, with 0 mean and values between [-1,1]
+            'norm': normalization of the variables, with values between [-1,1]
             'scale': normalization of the variables, with 0.5 mean and values between [0,1]
     returns: the scaled version of the array according to the chosen method
     '''
@@ -60,7 +21,7 @@ def feature_scaling(x, method='stand'):
     if method == 'stand':
         scaled = (x - means)/std
     elif method == 'norm':
-        scaled = 2*( (x - means)/ranges )
+        scaled = 2*( (x - mins)/ranges ) - 1
     elif method == 'scale':
         scaled = (x - mins)/ranges
 
@@ -76,6 +37,8 @@ def split_dataset(x, y, cross_validation_size=0.3, test_size=0.0, add_test=False
     shuffle: boolean, if True randomly shuffles the data
 
     returns: a training set, a cross-validation set and, if add_test = True, a test set
+             y is the first column of the returning arrays
+
     '''
     assert len(y) == x.shape[0], 'x and y have different sizes!'
     if not(add_test):
