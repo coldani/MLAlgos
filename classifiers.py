@@ -1,12 +1,13 @@
 import numpy as np
 from scipy.optimize import minimize
+import optimisation as opt
 
 '''
 logistic_regression: a class that implements the logistic regression classifier.
                     It allows to fit the parameters, predict results and compute a few performance metrics to evaluate the predictions
 neural_network: a class that implements a Neural Network classifier.
-                The NN can have any number of hidden layers and nodes, and currently supports three activation functions: relu,
-                leaky relu and sigmoid.
+                The NN can have any number of hidden layers and nodes, and currently supports four activation functions: relu,
+                leaky relu, softmax (for output layer only) and sigmoid. 
 '''
 
 class logistic_regression:
@@ -198,22 +199,22 @@ class neural_network:
     -regularization: boolean, defaults to True. If True the NN will add L2 regularization during training
     -lambda_: float, defaults to 0.1. Represents the regularization parameter (which is then scaled by 1/(2*m)). Used only if regularization=True
     -activation_funct: list (or tuple) of strings, representing the activation functions of each layer.
-                    Valid values are: 'sigmoid', 'relu', 'leaky relu'
+                    Valid values are: 'sigmoid', 'relu', 'leaky relu', 'softmax'
+                    Activation of output layer must be one of 'sigmoid' or 'softmax'
                     Lenght of list must be (num_layers - 1)
     -weights: dictionary containing the weight matrixes in the form of np ndarray. Defaults to None
             The shape of the weights matrix from layer i to layer i+1 is (# nodes layer i+1)*(# nodes layer i), with the possible addition of the bias weights (first column)
 
     ==== Methods ====
-    -train: returns the fitted weights, and saves them as instance attribute
+    -train: returns the fitted weights, and saves them as instance attribute. By default uses a mini-batch GD method
     -predict: returns the predicted output, and saves it as instance attribute
     -score: returns the [accuracy, prediction, recall] scores, and saves them as an instance attribute
 
     ==== Example ====
-    import classifiers as cl
+    import neural_network as nn
     import various as vr
     import matplotlib.pyplot as plt
     from sklearn import datasets # we will use the breast cancer dataset from sklearn
-    
     dataset = datasets.load_breast_cancer()
     X = dataset.data
     y = dataset.target
@@ -229,7 +230,7 @@ class neural_network:
     x_vs = vs[:,1:]
 
     # model initialization
-    nn_model = cl.neural_network(x_ts, y_ts, num_labels=2, size_hidden_layers=[30, 15], 
+    nn_model = nn.neural_network(x_ts, y_ts, num_labels=2, size_hidden_layers=[30, 15], 
             add_bias=True, regularization=True, lambda_=0.1, activation_funct=('relu', 'relu', 'sigmoid'))
     # model training
     weights = nn_model.train()
@@ -255,7 +256,8 @@ class neural_network:
         self.dict_functions = {
             'sigmoid': self._sigmoid,
             'relu': self._ReLU,
-            'leaky relu': self._leaky_ReLU
+            'leaky relu': self._leaky_ReLU,
+            'softmax': self._softmax
             }
 
         self.dict_derivatives = {
@@ -268,9 +270,9 @@ class neural_network:
         self.X = X
         if y is not None:
             self.y = y.reshape((len(y), 1))
-        self.y_matrix = np.zeros((len(y), num_labels))
-        for obs in range(len(y)):
-            self.y_matrix[obs, int(y[obs])] += 1
+            self.y_matrix = np.zeros((len(y), num_labels))
+            for obs in range(len(y)):
+                self.y_matrix[obs, int(y[obs])] += 1
 
         #create useful instance variables for describing the NN structure
         self.num_obs = X.shape[0]
@@ -298,8 +300,10 @@ class neural_network:
             assert len(y) == X.shape[0], 'X and y have different sizes!'
         assert len(size_hidden_layers)+1 == len(activation_funct), 'Please check the activation functions!'
         if weights is not None:
-            assert len(weights) == self.num_layers-1, 'wrong number of weights matrices!'
-
+            assert len(weights) == self.num_layers-1, 'Wrong number of weights matrices!'
+        assert 'softmax' not in activation_funct[:-1], 'Softmax can only be as the activation function for the output'
+        assert ((activation_funct[-1] == 'softmax') or (activation_funct[-1] == 'sigmoid')), 'Please only use \'softmax\' or \'sigmoid\' as activation function for the output layer'
+        
         #for debugging
         self.cost_evolution = []
     
@@ -344,6 +348,15 @@ class neural_network:
         derivative = a*(z<=0) + 1.0*(z>0)
         return derivative
 
+    def _softmax(self, z):
+        '''
+        z: np ndarray, with observations in the rows, labels in the columns
+        returns: softmax function of z 
+        '''
+        z -= np.max(z, axis=1, keepdims=True) # trick for numerical stability
+        softmax = np.exp(z) / np.sum(np.exp(z), axis=1, keepdims=True)
+        return softmax
+
     def _forward_propagation(self, weights=None, X=None, save_attributes=False):
         '''
         Calculates all a[layer] vectors, where a[0] is the input layer and a[num_layers] is the fitted output layer
@@ -367,13 +380,19 @@ class neural_network:
             a[layer+1] = funct(z[layer+1])
         
         y_hat = a[self.num_layers-1]
+
+        #### to avoid numerical issues
+        epsilon = 1e-10
+        y_hat = np.where(y_hat==0, y_hat+epsilon, y_hat)
+        ####
+
         if save_attributes:
             self.y_hat = y_hat
             self.a = a
             self.z = z
         return y_hat
         
-    def _cost(self, weights=None, X=None, y=None, save_attributes=False):
+    def _cost(self, weights=None, X=None, y=None, save_attributes=False, one_hot=False):
         '''
         Returns the loss function of the neural network (cross entropy)
         '''
@@ -385,16 +404,18 @@ class neural_network:
         if weights is None:
             weights = self.weights
         if y is None:
-            y = self.y
             y_matrix = self.y_matrix
         else:
-            y = y.reshape((len(y), 1))
-            y_matrix = np.zeros((len(y), self.num_labels))
-            for obs in range(len(y)):
-                y_matrix[obs, int(y[obs])] += 1
+            if one_hot: # use one_hot=True when 'y' is given as a one_hot encoded matrix
+                y_matrix = y
+            else:
+                y = y.reshape((len(y), 1))
+                y_matrix = np.zeros((len(y), self.num_labels))
+                for obs in range(len(y)):
+                    y_matrix[obs, int(y[obs])] += 1
 
         y_hat = self._forward_propagation(weights=weights, X=X, save_attributes=save_attributes)
-        cost = np.sum(-y_matrix*np.log(y_hat) - (1-y_matrix)*np.log(1-y_hat))/num_obs
+        cost = np.sum(-y_matrix*np.log(y_hat))/num_obs
         if self.regularization:
             l_2_reg = 0.0
             m = 0 #number of parameters
@@ -411,7 +432,7 @@ class neural_network:
         
         return cost
 
-    def _back_propagation(self, a=None, z=None, weights=None):
+    def _back_propagation(self, a=None, z=None, weights=None, y=None, one_hot=False):
         '''
         a: a dict of a[layer] vectors
         '''
@@ -422,27 +443,42 @@ class neural_network:
             z = self.z
         if weights is None:
             weights = self.weights
+        if y is None:
+            y_matrix = self.y_matrix
+            num_obs = self.num_obs
+        else:
+            num_obs = y.shape[0]
+            if one_hot:
+                y_matrix = y
+            else:
+                y = y.reshape((len(y), 1))
+                y_matrix = np.zeros((len(y), self.num_labels))
+                for obs in range(len(y)):
+                    y_matrix[obs, int(y[obs])] += 1
+
 
         delta = {}
         grad = {}
         list_layers = list(range(self.num_layers))
 
         #external layer
-        deriv = self.dict_derivatives[self.activation_funct[self.num_layers-2]]
-        delta[self.num_layers-1] = ( -self.y_matrix/a[self.num_layers-1] + (1-self.y_matrix)/(1-a[self.num_layers-1]) )
-        delta[self.num_layers-1] = delta[self.num_layers-1]*deriv(z[self.num_layers-1])
+        if self.activation_funct[-1] == 'sigmoid':
+            delta[self.num_layers-1] = a[self.num_layers-1]*y_matrix - y_matrix
+        elif self.activation_funct[-1] == 'softmax':
+            delta[self.num_layers-1] = a[self.num_layers-1] - y_matrix
         if self.add_bias:
-            bias = np.ones((self.num_obs,1))
+            bias = np.ones((num_obs,1))
             a_l_1 = np.append(bias, a[self.num_layers-2], axis=1) # this is a[penultimate_layer]
         else:
             a_l_1 = a[self.num_layers-2]
-        grad[self.num_layers-1] = (1/self.num_obs)*np.matmul(delta[self.num_layers-1].T,a_l_1)
+        grad[self.num_layers-1] = (1/num_obs)*np.matmul(delta[self.num_layers-1].T,a_l_1)
         if self.regularization:
             weights_temp = weights[self.num_layers-1]
             if self.add_bias:
                 weights_temp[:,0] = 0.0
             grad[self.num_layers-1] += weights_temp*(self.lambda_/self.m)
 
+        #hidden layers
         for layer in list_layers[-2:0:-1]:
             deriv = self.dict_derivatives[self.activation_funct[layer-1]]
 
@@ -453,11 +489,11 @@ class neural_network:
             delta[layer] = np.matmul(delta[layer+1],weights_l1)
             delta[layer] = delta[layer]*deriv(z[layer])
             if self.add_bias:
-                bias = np.ones((self.num_obs,1))
+                bias = np.ones((num_obs,1))
                 a_l_1 = np.append(bias, a[layer-1], axis=1)
             else:
                 a_l_1 = a[layer-1]
-            grad[layer] = (1/self.num_obs)*np.matmul(delta[layer].T, a_l_1)
+            grad[layer] = (1/num_obs)*np.matmul(delta[layer].T, a_l_1)
             if self.regularization:
                 weights_temp = weights[layer]
                 if self.add_bias:
@@ -468,31 +504,70 @@ class neural_network:
         
         return grad
     
-    def _wrapper(self, weights_unrolled):
+    def _wrapper(self, weights_unrolled, batch):
+        
+        X = batch[: , :-self.num_labels]
+        y = batch[: , -self.num_labels:]
+        
         #reshape weights vector
-        self.iter+=1
-        if self.verbose:
-            print('Iteration number: %d' %self.iter)
         reshaped_weights = {}
         for layer in range(1,self.num_layers):
             size = (self.size_layers[layer-1]+self.add_bias)*self.size_layers[layer]
             reshaped_weights[layer] = weights_unrolled[:size].reshape(((self.size_layers[layer], self.size_layers[layer-1]+self.add_bias)))
             weights_unrolled = weights_unrolled[size:]
-        cost = self._cost(weights=reshaped_weights, save_attributes=True)
+        cost = self._cost(weights=reshaped_weights, X=X, y=y, save_attributes=True, one_hot=True)
         
-        gradient = self._back_propagation(weights=reshaped_weights)
+        gradient = self._back_propagation(weights=reshaped_weights, y=y, one_hot=True)
         gradient_unrolled = np.asarray([])
         for layer in range(1,self.num_layers):
             gradient_layer_unrolled = gradient[layer].flatten()
             gradient_unrolled = np.append(gradient_unrolled, gradient_layer_unrolled)
         
         return (cost, gradient_unrolled)
-    
-    def train(self, maxiter=2000, method='BFGS', disp=True, verbose=False):
+
+    def train(self, method='adam', learning_rate=1e-2, batch_size=64, max_epochs=1000, eps=0, grad_tol=1e-5, shuffle=True, verbose=True, freq=1):
+            '''
+            This function trains the neural network and returns the trained weights
+            Trained weights are also saved as instance variable
+
+            Parameters (optional):
+            -method: string, accepts the following methods: 'vanilla', 'adam', 'momentum'
+                    Defaults to 'adam'
+            -learning_rate: float, represents the value of the learning rate
+                    Defaults to 0.01
+            -batch_size: size of the batch. Allows to implement SGD (batch_size=1), mini-batch GD (e.g. batch_size=64) or 
+                    full batch gradient descent (batch_size=self.X.shape[0])
+                    Defaults to 64
+            -max_epochs: int, maximum numbers of epochs before halting the training
+                    Defaults to 1000
+            -eps: float, a parameter to halt earlier the training when the cost function converges to a minimum - see description and 
+                    implementation in the optimisation function
+                    Defaults to 0 (i.e., this method is not used to halt the training)
+            -grad_tol: float, a parameter used to halt the training earlier. Training is stopped when the norm of the gradient vector
+                    becomes smaller than grad_tol
+                    Defaults to 1e-5
+            -shuffle: bool, if True the training set is randomly re-shuffled at every epoch
+                    Defaults to True
+            -verbose: bool, if True print information during and after training
+                    Defaults to True
+            -freq: int, used to set the frequency (at epoch level) at which training info is printed. Used only if verbose==True
+                    Defaults to 1 (information printed at every epoch)
+            '''
 
         self.cost_evolution = [] #for debugging
-        self.verbose=verbose
-        self.iter = 0
+        options = {
+            'method': method,
+            'learning_rate': learning_rate, 
+            'batch_size': batch_size,
+            'max_epochs': max_epochs,
+            'eps': eps,
+            'grad_tol': grad_tol,
+            'shuffle': shuffle,
+            'verbose': verbose,
+            'freq': freq
+        }
+
+
         #initialising weights
         unrolled_initial_weights = np.asarray([])
         for layer in range(1, self.num_layers):
@@ -500,16 +575,20 @@ class neural_network:
             unrolled_layer_weights = unrolled_layer_weights*np.sqrt(2/(self.size_layers[layer]+self.size_layers[layer-1]))
             unrolled_initial_weights = np.append(unrolled_initial_weights, unrolled_layer_weights)
         
-        trained_weights = minimize(self._wrapper, x0=unrolled_initial_weights, method=method,
-                                jac=True, options={'maxiter':maxiter, 'disp':disp})
+        #creating 'training_set'
+        training_set = np.concatenate((self.X, self.y_matrix), axis=1)
+
+        weights_unrolled = opt.mini_batch(training_set, unrolled_initial_weights, self._wrapper, **options)
         
-        weights_unrolled = trained_weights.x
         reshaped_weights = {}
         for layer in range(1,self.num_layers):
             size = (self.size_layers[layer-1]+self.add_bias)*self.size_layers[layer]
             reshaped_weights[layer] = weights_unrolled[:size].reshape(((self.size_layers[layer], self.size_layers[layer-1]+self.add_bias)))
             weights_unrolled = weights_unrolled[size:]       
         self.weights = reshaped_weights
+
+        #the following line calculates y_hat using the entire training set and saves it as an instance variable
+        y_hat = self._forward_propagation(save_attributes=True)
 
         return self.weights
     
@@ -518,7 +597,7 @@ class neural_network:
         given X and the weights, this methods predicts the output on the basis of the NN structure specified when initialising the instance
         -X: np array. The input array. Must have different observations in the rows, and variables in the columns
         -weights: dictionary with the weight matrixes, as np ndarray
-         Size of weights (# of dict keys) is (num_layers - 1)
+        Size of weights (# of dict keys) is (num_layers - 1)
         '''
         if X is None:
             X = self.X
@@ -578,4 +657,3 @@ class neural_network:
         self.score_dict = score
         
         return score
-
