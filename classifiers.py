@@ -1,5 +1,4 @@
 import numpy as np
-from scipy.optimize import minimize
 import optimisation as opt
 
 '''
@@ -13,17 +12,18 @@ neural_network: a class that implements a Neural Network classifier.
 class logistic_regression:
     '''
     This class represents a logistic regression classifier
+
+    ==== Parameters ====
     X and y are the training set and output vector respectively
-    X: np.ndarray. Each row is an observations, each column is a variable
-    y: np.array. Each element is the true output value of an observation (either 1 or 0)
-    has_intercept: Boolean.  Used only for regularization purposes (it doesn't penalize intercept coefficient)
-    regularized: Boolean. If True, applies regularization to the training of the model
+    -X: np.ndarray. Each row is an observations, each column is a variable
+    -y: np.array. Each element is the true output value of an observation (either 1 or 0)
+    -has_intercept: Boolean.  Used only for regularization purposes (it doesn't penalize intercept coefficient)
+    -regularized: Boolean. If True, applies regularization to the training of the model
 
-
-    Methods
-    train: returns the fitted parameters
-    predict: returns the predicted output
-    score: returns the accuracy, precision, recall and f1 scores
+    ==== Methods ====
+    -train: returns the fitted parameters, and saves them as instance variable
+    -predict: returns the predicted output, and saves it as instance variable
+    -score: returns the accuracy, precision, recall and f1 scores
     '''
     
     def __init__(self, X, y = None, has_intercept=True, regularized=True, params = None, y_hat=None):
@@ -44,7 +44,7 @@ class logistic_regression:
         '''
         X: np ndarray, defaults to instance X
         params: tuple, list, array, defaults to instance params
-        returns: sigmoid function of matrix product of data and params
+        returns: sigmoid function of the matrix product of data and params
         '''
         if X is None:
             X = self.X
@@ -109,6 +109,16 @@ class logistic_regression:
 
         return (cost, grad)
 
+    def _wrapper(self, params, batch, regularized, lambda_, has_intercept):
+
+        X = batch[: , :-1]
+        y = batch[: , -1]
+
+        cost, grad = self._cost(params, X, y, regularized, lambda_, has_intercept)
+
+        return (cost, grad)
+
+
     def train(self, X=None, y=None, regularized = None, lambda_ = 0.1, has_intercept = None):
         '''
         X: the training set
@@ -128,12 +138,13 @@ class logistic_regression:
         y = y.reshape((len(y),1))
         num_params = np.shape(X)[1]
         init_params = np.random.random(num_params)
+        training_set = np.concatenate((X, y), axis=1)
+        trained_params = opt.mini_batch(training_set, init_params, self._wrapper, args=(regularized, lambda_, has_intercept),
+                                         batch_size = np.inf, method='adam')
 
-        trained_params = minimize(self._cost, x0=init_params, args=(X, y, regularized, lambda_, has_intercept),
-                                jac=True, options={'maxiter':2000, 'disp':True})
-        self.params = trained_params.x
+        self.params = trained_params
 
-        return trained_params.x
+        return trained_params
 
     def predict(self, X=None, params=None):
         '''
@@ -415,7 +426,7 @@ class neural_network:
                     y_matrix[obs, int(y[obs])] += 1
 
         y_hat = self._forward_propagation(weights=weights, X=X, save_attributes=save_attributes)
-        cost = np.sum(-y_matrix*np.log(y_hat))/num_obs
+        cost = np.sum( (-1)*y_matrix*np.log(y_hat) ) / num_obs
         if self.regularization:
             l_2_reg = 0.0
             m = 0 #number of parameters
@@ -527,31 +538,31 @@ class neural_network:
 
     def train(self, method='adam', learning_rate=1e-2, batch_size=64, max_epochs=1000, eps=0, grad_tol=1e-5, shuffle=True, verbose=True, freq=1):
         '''
-            This function trains the neural network and returns the trained weights
-            Trained weights are also saved as instance variable
+        This function trains the neural network and returns the trained weights
+        Trained weights are also saved as instance variable
 
-            Parameters (optional):
-            -method: string, accepts the following methods: 'vanilla', 'adam', 'momentum'
-                    Defaults to 'adam'
-            -learning_rate: float, represents the value of the learning rate
-                    Defaults to 0.01
-            -batch_size: size of the batch. Allows to implement SGD (batch_size=1), mini-batch GD (e.g. batch_size=64) or 
-                    full batch gradient descent (batch_size=self.X.shape[0])
-                    Defaults to 64
-            -max_epochs: int, maximum numbers of epochs before halting the training
-                    Defaults to 1000
-            -eps: float, a parameter to halt earlier the training when the cost function converges to a minimum - see description and 
-                    implementation in the optimisation function
-                    Defaults to 0 (i.e., this method is not used to halt the training)
-            -grad_tol: float, a parameter used to halt the training earlier. Training is stopped when the norm of the gradient vector
-                    becomes smaller than grad_tol
-                    Defaults to 1e-5
-            -shuffle: bool, if True the training set is randomly re-shuffled at every epoch
-                    Defaults to True
-            -verbose: bool, if True print information during and after training
-                    Defaults to True
-            -freq: int, used to set the frequency (at epoch level) at which training info is printed. Used only if verbose==True
-                    Defaults to 1 (information printed at every epoch)
+        Parameters (optional):
+        -method: string, accepts the following methods: 'vanilla', 'adam', 'momentum'
+                Defaults to 'adam'
+        -learning_rate: float, represents the value of the learning rate
+                Defaults to 0.01
+        -batch_size: size of the batch. Allows to implement SGD (batch_size=1), mini-batch GD (e.g. batch_size=64) or 
+                full batch gradient descent (batch_size=self.X.shape[0])
+                Defaults to 64
+        -max_epochs: int, maximum numbers of epochs before halting the training
+                Defaults to 1000
+        -eps: float, a parameter to halt earlier the training when the cost function converges to a minimum - see description and 
+                implementation in the optimisation function
+                Defaults to 0 (i.e., this method is not used to halt the training)
+        -grad_tol: float, a parameter used to halt the training earlier. Training is stopped when the norm of the gradient vector
+                becomes smaller than grad_tol
+                Defaults to 1e-5
+        -shuffle: bool, if True the training set is randomly re-shuffled at every epoch
+                Defaults to True
+        -verbose: bool, if True print information during and after training
+                Defaults to True
+        -freq: int, used to set the frequency (at epoch level) at which training info is printed. Used only if verbose==True
+                Defaults to 1 (information printed at every epoch)
         '''
 
         self.cost_evolution = [] #for debugging
