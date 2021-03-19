@@ -526,7 +526,7 @@ class neural_network:
         return (cost, gradient_unrolled)
 
     def train(self, method='adam', learning_rate=1e-2, batch_size=64, max_epochs=1000, eps=0, grad_tol=1e-5, shuffle=True, verbose=True, freq=1):
-            '''
+        '''
             This function trains the neural network and returns the trained weights
             Trained weights are also saved as instance variable
 
@@ -552,7 +552,7 @@ class neural_network:
                     Defaults to True
             -freq: int, used to set the frequency (at epoch level) at which training info is printed. Used only if verbose==True
                     Defaults to 1 (information printed at every epoch)
-            '''
+        '''
 
         self.cost_evolution = [] #for debugging
         options = {
