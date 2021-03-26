@@ -119,7 +119,7 @@ class logistic_regression:
         return (cost, grad)
 
 
-    def train(self, X=None, y=None, regularized = None, lambda_ = 0.1, has_intercept = None):
+    def train(self, X=None, y=None, regularized = None, lambda_ = 0.1, has_intercept = None, max_epochs=1000):
         '''
         X: the training set
         y: the correct classification (1 or 0)
@@ -140,7 +140,7 @@ class logistic_regression:
         init_params = np.random.random(num_params)
         training_set = np.concatenate((X, y), axis=1)
         trained_params = opt.mini_batch(training_set, init_params, self._wrapper, args=(regularized, lambda_, has_intercept),
-                                         batch_size = np.inf, method='adam')
+                                         batch_size = np.inf, method='adam', max_epochs=max_epochs)
 
         self.params = trained_params
 
@@ -210,8 +210,8 @@ class neural_network:
     -regularization: boolean, defaults to True. If True the NN will add L2 regularization during training
     -lambda_: float, defaults to 0.1. Represents the regularization parameter (which is then scaled by 1/(2*m)). Used only if regularization=True
     -activation_funct: list (or tuple) of strings, representing the activation functions of each layer.
-                    Valid values are: 'sigmoid', 'relu', 'leaky relu', 'softmax'
-                    Activation of output layer must be one of 'sigmoid' or 'softmax'
+                    Valid values are: 'sigmoid', 'relu', 'leaky relu', 'softmax', 'linear'
+                    Activation of output layer must be one of 'sigmoid', 'softmax' or 'linear'
                     Lenght of list must be (num_layers - 1)
     -weights: dictionary containing the weight matrixes in the form of np ndarray. Defaults to None
             The shape of the weights matrix from layer i to layer i+1 is (# nodes layer i+1)*(# nodes layer i), with the possible addition of the bias weights (first column)
@@ -268,13 +268,15 @@ class neural_network:
             'sigmoid': self._sigmoid,
             'relu': self._ReLU,
             'leaky relu': self._leaky_ReLU,
-            'softmax': self._softmax
+            'softmax': self._softmax,
+            'linear': self._linear
             }
 
         self.dict_derivatives = {
             'sigmoid': self._sigmoid_derivative,
             'relu': self._ReLU_derivative,
-            'leaky relu': self._leaky_ReLU_derivative
+            'leaky relu': self._leaky_ReLU_derivative,
+            'linear': self._linear_derivative
             }
 
         #define input and output layers
@@ -313,7 +315,7 @@ class neural_network:
         if weights is not None:
             assert len(weights) == self.num_layers-1, 'Wrong number of weights matrices!'
         assert 'softmax' not in activation_funct[:-1], 'Softmax can only be as the activation function for the output'
-        assert ((activation_funct[-1] == 'softmax') or (activation_funct[-1] == 'sigmoid')), 'Please only use \'softmax\' or \'sigmoid\' as activation function for the output layer'
+        assert ((activation_funct[-1] == 'softmax') or (activation_funct[-1] == 'sigmoid') or (activation_funct[-1] == 'linear')), 'Please only use \'softmax\', \'sigmoid\' or \'linear\' as activation function for the output layer'
         
         #for debugging
         self.cost_evolution = []
@@ -367,6 +369,12 @@ class neural_network:
         z -= np.max(z, axis=1, keepdims=True) # trick for numerical stability
         softmax = np.exp(z) / np.sum(np.exp(z), axis=1, keepdims=True)
         return softmax
+
+    def _linear(self, z):
+        return z
+    
+    def _linear_derivative(self, z):
+        return np.ones_like(z)
 
     def _forward_propagation(self, weights=None, X=None, save_attributes=False):
         '''
@@ -477,11 +485,15 @@ class neural_network:
             delta[self.num_layers-1] = a[self.num_layers-1]*y_matrix - y_matrix
         elif self.activation_funct[-1] == 'softmax':
             delta[self.num_layers-1] = a[self.num_layers-1] - y_matrix
+        elif self.activation_funct[-1] == 'linear':
+            delta[self.num_layers-1] = - (1 / a[self.num_layers-1] * y_matrix)
+
         if self.add_bias:
             bias = np.ones((num_obs,1))
             a_l_1 = np.append(bias, a[self.num_layers-2], axis=1) # this is a[penultimate_layer]
         else:
             a_l_1 = a[self.num_layers-2]
+
         grad[self.num_layers-1] = (1/num_obs)*np.matmul(delta[self.num_layers-1].T,a_l_1)
         if self.regularization:
             weights_temp = weights[self.num_layers-1]
@@ -599,7 +611,7 @@ class neural_network:
         self.weights = reshaped_weights
 
         #the following line calculates y_hat using the entire training set and saves it as an instance variable
-        y_hat = self._forward_propagation(save_attributes=True)
+        self.y_hat = self._forward_propagation(save_attributes=True)
 
         return self.weights
     
